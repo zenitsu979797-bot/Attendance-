@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2563eb">
+<title>My Attendance</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1b1f24;--mu:#6b7280;--ac:#2563eb;--ok:#16a34a;--bd:#e5e7eb}
+@media (prefers-color-scheme:dark){:root{--bg:#111418;--card:#1b2027;--tx:#e8eaed;--mu:#9aa3af;--ac:#60a5fa;--ok:#4ade80;--bd:#2c333c}}
+*{box-sizing:border-box}body{margin:0 auto;background:var(--bg);color:var(--tx);font:16px system-ui,sans-serif;padding:16px;max-width:520px}
+h1{font-size:22px;margin:8px 0 12px}.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:14px}
+label{display:block;font-size:13px;color:var(--mu);margin:8px 0 4px}
+input{width:100%;font-size:18px;padding:10px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)}
+.row{display:flex;gap:10px}.row>*{flex:1}
+button{font-size:17px;padding:13px;border-radius:12px;border:0;background:var(--ac);color:#fff;width:100%;margin-top:12px}
+button.s{background:var(--bd);color:var(--tx);font-size:14px;padding:10px;margin-top:8px}
+#st{font-size:13px;color:var(--ok);margin-top:8px;min-height:18px}#warn{font-size:13px;color:#d97706;margin-bottom:8px}
+.it{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--bd);font-size:15px}
+.it small{color:var(--mu);display:block}.x{background:none;color:var(--mu);width:auto;margin:0;padding:6px 10px;font-size:18px}
+.tot{font-weight:600;margin-bottom:6px}
+</style></head><body>
+<h1>📋 My Attendance</h1>
+<div class="card">
+  <label>Date</label><input type="date" id="d">
+  <div class="row"><div><label>Time in</label><input type="time" id="a"></div>
+  <div><label>Time out</label><input type="time" id="b"></div></div>
+  <button id="save">✅ Mark Attendance</button>
+  <div id="st"></div>
+</div>
+<div class="card">
+  <div id="warn"></div>
+  <div class="tot" id="tot"></div>
+  <div id="list"></div>
+  <div class="row">
+    <button class="s" id="exp">⬇️ Backup file</button>
+    <button class="s" id="csv">📊 Excel (CSV)</button>
+  </div>
+  <button class="s" id="imp">⬆️ Restore from backup file</button>
+  <input type="file" id="file" accept=".json" hidden>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const K="att_data",BK="att_backups",LB="att_lastexport";
+let rows={};
+const ls={g:k=>{try{return localStorage.getItem(k)}catch(e){return null}},s:(k,v)=>{try{localStorage.setItem(k,v);return true}catch(e){return false}}};
+const today=()=>{const t=new Date();return t.getFullYear()+"-"+String(t.getMonth()+1).padStart(2,"0")+"-"+String(t.getDate()).padStart(2,"0")};
+const t12=s=>{let[h,m]=s.split(":").map(Number);const p=h>=12?"PM":"AM";h=h%12||12;return h+":"+String(m).padStart(2,"0")+" "+p};
+const hrs=(a,b)=>{let x=(+b.slice(0,2)*60+ +b.slice(3))-(+a.slice(0,2)*60+ +a.slice(3));if(x<=0)x+=1440;return Math.round(x/60*100)/100};
+const msg=t=>$("st").textContent=t;
+function persist(){
+  if(!ls.s(K,JSON.stringify(rows))){msg("⚠️ Could not save. Is private mode on?");return}
+  let b=[];try{b=JSON.parse(ls.g(BK)||"[]")}catch(e){}
+  b.push({t:new Date().toISOString(),data:rows});ls.s(BK,JSON.stringify(b.slice(-30)));
+}
+function render(){
+  const ks=Object.keys(rows).sort().reverse(),mo=today().slice(0,7);
+  let th=0,dc=0;ks.forEach(k=>{if(k.startsWith(mo)){th+=rows[k].hours;dc++}});
+  $("tot").textContent="This month: "+dc+" days • "+Math.round(th*100)/100+" hrs";
+  $("list").innerHTML="";
+  ks.forEach(k=>{const r=rows[k],el=document.createElement("div");el.className="it";
+    const l=document.createElement("div");l.textContent=k;const s=document.createElement("small");
+    s.textContent=t12(r.in)+" → "+t12(r.out)+" • "+r.hours+" hrs";l.appendChild(s);
+    const x=document.createElement("button");x.className="x";x.textContent="✕";x.onclick=()=>{if(confirm("Delete "+k+"?")){delete rows[k];persist();render()}};
+    el.append(l,x);$("list").appendChild(el)});
+  const le=ls.g(LB),days=le?Math.floor((Date.now()-new Date(le))/864e5):null;
+  $("warn").textContent=ks.length&&(days===null||days>=7)?"⚠️ "+(days===null?"No backup file saved yet":"Last backup file: "+days+" days ago")+". Tap Backup file.":"";
+}
+function save(name,text,type){
+  const u=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement("a");
+  a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);
+}
+$("save").onclick=()=>{
+  const d=$("d").value,a=$("a").value,b=$("b").value;
+  if(!d||!a||!b){msg("Fill date and both times");return}
+  ls.s("att_in",a);ls.s("att_out",b);
+  rows[d]={date:d,in:a,out:b,hours:hrs(a,b)};persist();render();
+  msg("Saved ✓ "+t12(a)+" → "+t12(b)+" = "+rows[d].hours+" hrs");
+};
+$("exp").onclick=()=>{save("attendance_backup_"+today()+".json",JSON.stringify(rows,null,1),"application/json");ls.s(LB,new Date().toISOString());render();msg("Backup file downloaded ✓")};
+$("csv").onclick=()=>{const ks=Object.keys(rows).sort();
+  save("attendance_"+today()+".csv","date,time_in,time_out,hours\n"+ks.map(k=>[k,t12(rows[k].in),t12(rows[k].out),rows[k].hours].join(",")).join("\n"),"text/csv");msg("CSV downloaded ✓")};
+$("imp").onclick=()=>$("file").click();
+$("file").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
+  r.onload=()=>{try{const o=JSON.parse(r.result);rows=Object.assign(rows,o);persist();render();msg("Restored ✓")}catch(x){msg("❌ Not a valid backup file")}};r.readAsText(f)};
+$("d").value=today();$("a").value=ls.g("att_in")||"07:00";$("b").value=ls.g("att_out")||"20:00";
+try{rows=JSON.parse(ls.g(K)||"{}")}catch(e){rows={}}
+render();
+</script></body></html>
